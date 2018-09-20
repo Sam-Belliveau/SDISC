@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <vector>
-#include <array>
 
 namespace SDISC // Define Types
 {
@@ -49,7 +48,7 @@ namespace SDISC // OP-Codes
     const COUNT tick_count[0x10] =
     {
       // Program Control
-      2,
+      0,
       // Jumps and Conditions
       4, 6, 6,
       // Load Store Set
@@ -67,27 +66,44 @@ namespace SDISC // Instructions
   struct Instruction
   {
   public: // Constructor
-    Instruction() : code{OP::STP}, rega{0}, byte{0} {}
+    Instruction()
+      : data{0} {}
 
     Instruction(const Instruction& in)
-      : code{in.code}, rega{in.rega}, byte{in.byte} {}
+      : data{in.data} {}
 
-    Instruction(const BYTE& op) : code{op}, rega{0}, byte{0} {}
+    Instruction(const BYTE& op)
+    {
+      data =  0x0000;
+      data |= (op & 0xf) << 12;
+    }
 
     Instruction(const BYTE& op, const BYTE& ra,
                 const BYTE& rb, const BYTE& rc)
-                : code{op}, rega{ra}
-                , regb{rb}, regc{rc} {}
+    {
+        data =  0x0000;
+        data |= (op & 0xf) << 12;
+        data |= (ra & 0xf) << 8;
+        data |= (rb & 0xf) << 4;
+        data |= (rc & 0xf) << 0;
+    }
 
     Instruction(const BYTE& op, const BYTE& ra, const BYTE& b)
-                : code{op}, rega{ra}, byte{b} {}
-
-    BYTE code : 4, rega : 4;
-    union
     {
-      struct { BYTE regb : 4, regc : 4; };
-      BYTE byte : 8;
-    };
+      data =  0x0000;
+      data |= (op & 0xf) << 12;
+      data |= (ra & 0xf) << 8;
+      data |= (b & 0xff) << 0;
+    }
+
+    BYTE code() const { return (data >> 12) & 0xf; }
+    BYTE rega() const { return (data >> 8)  & 0xf; }
+    BYTE regb() const { return (data >> 4)  & 0xf; }
+    BYTE regc() const { return (data >> 0)  & 0xf; }
+    BYTE byte() const { return (data >> 0)  & 0xff; }
+
+  private:
+    WORD data;
   };
 }
 
@@ -104,8 +120,6 @@ namespace SDISC // Constants
 
 namespace SDISC
 {
-  enum STATE { running, stopped };
-
   class CPU
   {
   public: // CPU Control
@@ -114,30 +128,9 @@ namespace SDISC
     void reset()
     {
       tick = 0;
-      status = STATE::stopped;
-
       for(Instruction& i : program) i = init_pro;
       for(WORD& i : mem) i = init_mem;
       for(WORD& i : reg) i = init_reg;
-    }
-
-    void start(const WORD start_pc = 0)
-    {
-      PC = start_pc;
-      status = STATE::running;
-
-      while(status != STATE::stopped)
-        RUN(program[PC++]);
-    }
-
-    template<std::size_t size>
-    void loadProgram(const std::array<Instruction, size>& in_program)
-    {
-      for(std::size_t i = 0; i < pro_size; i++)
-      {
-        if(i < size) program[i] = in_program[i];
-        else program[i] = init_pro;
-      }
     }
 
     void loadProgram(const std::vector<Instruction>& in_program)
@@ -151,10 +144,11 @@ namespace SDISC
 
   public: // Instructions
     /* Execute Instruction */
+    COUNT CYCLE() { return RUN(program[PC++]); }
     COUNT RUN(const Instruction&);
 
     /* Program Control */
-    COUNT STP(const Instruction&); // 2 Ticks
+    COUNT STP(const Instruction&); // 0 Ticks
 
     /* Jumps/Conditions */
     COUNT JAL(const Instruction&); // 4 Ticks
@@ -182,18 +176,17 @@ namespace SDISC
     /* Clock Function */
     COUNT addTicks(const Instruction& data)
     {
-      tick += OP::tick_count[data.code];
-      return  OP::tick_count[data.code];
+      tick += OP::tick_count[data.code()];
+      return  OP::tick_count[data.code()];
     }
 
   public: // Variables
-    COUNT tick = 0;
-    STATE status = STATE::stopped;
-
     WORD PC = 0;
-    std::array<Instruction, pro_size> program;
-    std::array<WORD, reg_size> reg;
-    std::array<WORD, mem_size> mem;
+    Instruction program[pro_size];
+    WORD reg[reg_size];
+    WORD mem[mem_size];
+
+    COUNT tick = 0;
   };
 }
 
@@ -203,45 +196,45 @@ namespace SDISC
   COUNT CPU::RUN(const Instruction& data)
   {
     // Program Control
-    if(data.code == OP::STP)
+    if(data.code() == OP::STP)
     { return STP(data); }
 
     // Jump/Condition
-    else if(data.code == OP::JAL)
+    else if(data.code() == OP::JAL)
     { return JAL(data); }
-    else if(data.code == OP::JIE)
+    else if(data.code() == OP::JIE)
     { return JIE(data); }
-    else if(data.code == OP::JIL)
+    else if(data.code() == OP::JIL)
     { return JIL(data); }
 
     // Store/Load/Set
-    else if(data.code == OP::STR)
+    else if(data.code() == OP::STR)
     { return STR(data); }
-    else if(data.code == OP::LOD)
+    else if(data.code() == OP::LOD)
     { return LOD(data); }
-    else if(data.code == OP::SHB)
+    else if(data.code() == OP::SHB)
     { return SHB(data); }
-    else if(data.code == OP::SLB)
+    else if(data.code() == OP::SLB)
     { return SLB(data); }
 
     // Bitwise
-    else if(data.code == OP::AND)
+    else if(data.code() == OP::AND)
     { return AND(data); }
-    else if(data.code == OP::NND)
+    else if(data.code() == OP::NND)
     { return NND(data); }
-    else if(data.code == OP::IOR)
+    else if(data.code() == OP::IOR)
     { return IOR(data); }
-    else if(data.code == OP::XOR)
+    else if(data.code() == OP::XOR)
     { return XOR(data); }
 
     // Math
-    else if(data.code == OP::ADD)
+    else if(data.code() == OP::ADD)
     { return ADD(data); }
-    else if(data.code == OP::SUB)
+    else if(data.code() == OP::SUB)
     { return SUB(data); }
-    else if(data.code == OP::MUL)
+    else if(data.code() == OP::MUL)
     { return MUL(data); }
-    else if(data.code == OP::DIV)
+    else if(data.code() == OP::DIV)
     { return DIV(data); }
 
     return 0;
@@ -250,19 +243,15 @@ namespace SDISC
   /* Program Control */
   // Stops Program [No Inputs]
   COUNT CPU::STP(const Instruction& data)
-  {
-    status = STATE::stopped;
-
-    return addTicks(data);
-  }
+  { return addTicks(data); }
 
   /* Jumps/Conditions */
   // Stores current PC in rega then jumps to address in regb
   COUNT CPU::JAL(const Instruction& data)
   {
     const WORD old_PC = ++PC;
-    PC = reg[data.regb];
-    reg[data.rega] = old_PC;
+    PC = reg[data.regb()];
+    reg[data.rega()] = old_PC;
 
     return addTicks(data);
   }
@@ -270,8 +259,8 @@ namespace SDISC
   // If rega and regb are equal, jump to address in regc
   COUNT CPU::JIE(const Instruction& data)
   {
-    if(reg[data.rega] == reg[data.regb])
-    { PC = reg[data.regc]; }
+    if(reg[data.rega()] == reg[data.regb()])
+    { PC = reg[data.regc()]; }
 
     return addTicks(data);
   }
@@ -279,8 +268,8 @@ namespace SDISC
   // If rega is less than regb, jump to address in regc
   COUNT CPU::JIL(const Instruction& data)
   {
-    if(reg[data.rega] < reg[data.regb])
-    { PC = reg[data.regc]; }
+    if(reg[data.rega()] < reg[data.regb()])
+    { PC = reg[data.regc()]; }
 
     return addTicks(data);
   }
@@ -289,7 +278,7 @@ namespace SDISC
   // Set mem address in regb to rega
   COUNT CPU::STR(const Instruction& data)
   {
-    mem[reg[data.regb]] = reg[data.rega];
+    mem[reg[data.regb()]] = reg[data.rega()];
 
     return addTicks(data);
   }
@@ -297,7 +286,7 @@ namespace SDISC
   // Set rega to mem address in regb
   COUNT CPU::LOD(const Instruction& data)
   {
-    reg[data.rega] = mem[reg[data.regb]];
+    reg[data.rega()] = mem[reg[data.regb()]];
 
     return addTicks(data);
   }
@@ -305,8 +294,8 @@ namespace SDISC
   // Set MS-8 bits to byte
   COUNT CPU::SHB(const Instruction& data)
   {
-    reg[data.rega] &= 0x00ff;
-    reg[data.rega] |= data.byte << 8;
+    reg[data.rega()] &= 0x00ff;
+    reg[data.rega()] |= data.byte() << 8;
 
     return addTicks(data);
   }
@@ -314,8 +303,8 @@ namespace SDISC
   // Set LS-8 bits to byte
   COUNT CPU::SLB(const Instruction& data)
   {
-    reg[data.rega] &= 0xff00;
-    reg[data.rega] |= data.byte;
+    reg[data.rega()] &= 0xff00;
+    reg[data.rega()] |= data.byte();
 
     return addTicks(data);
   }
@@ -324,7 +313,7 @@ namespace SDISC
   // And regb and regc and store it in rega
   COUNT CPU::AND(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] & reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] & reg[data.regc()];
 
     return addTicks(data);
   }
@@ -332,7 +321,7 @@ namespace SDISC
   // Not And regb and regc and store it in rega
   COUNT CPU::NND(const Instruction& data)
   {
-    reg[data.rega] = ~(reg[data.regb] & reg[data.regc]);
+    reg[data.rega()] = ~(reg[data.regb()] & reg[data.regc()]);
 
     return addTicks(data);
   }
@@ -340,7 +329,7 @@ namespace SDISC
   // Inclusive Or regb and regc and store it in rega
   COUNT CPU::IOR(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] | reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] | reg[data.regc()];
 
     return addTicks(data);
   }
@@ -348,7 +337,7 @@ namespace SDISC
   // Exclusive Or regb and regc and store it in rega
   COUNT CPU::XOR(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] ^ reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] ^ reg[data.regc()];
 
     return addTicks(data);
   }
@@ -357,7 +346,7 @@ namespace SDISC
   // Add regb and regc and store it in rega
   COUNT CPU::ADD(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] + reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] + reg[data.regc()];
 
     return addTicks(data);
   }
@@ -365,7 +354,7 @@ namespace SDISC
   // Subtract regb by regc and store it in rega
   COUNT CPU::SUB(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] - reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] - reg[data.regc()];
 
     return addTicks(data);
   }
@@ -373,7 +362,7 @@ namespace SDISC
   // Multiply regb and regc and store it in rega
   COUNT CPU::MUL(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] * reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] * reg[data.regc()];
 
     return addTicks(data);
   }
@@ -381,7 +370,7 @@ namespace SDISC
   // Divide regb by regc and store it in rega
   COUNT CPU::DIV(const Instruction& data)
   {
-    reg[data.rega] = reg[data.regb] / reg[data.regc];
+    reg[data.rega()] = reg[data.regb()] / reg[data.regc()];
 
     return addTicks(data);
   }
