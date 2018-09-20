@@ -157,7 +157,7 @@ namespace SDISC
     COUNT STP(const Instruction&); // 2 Ticks
 
     /* Jumps/Conditions */
-    COUNT JAL(const Instruction&); // 6 Ticks
+    COUNT JAL(const Instruction&); // 4 Ticks
     COUNT JIE(const Instruction&); // 6 Ticks
     COUNT JIL(const Instruction&); // 6 Ticks
 
