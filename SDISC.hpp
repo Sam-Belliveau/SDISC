@@ -2,13 +2,13 @@
 #define SDISC_HPP
 
 #include <cstdint>
-#include <vector>
+#include <algorithm>
 
 namespace SDISC // Define Types
 {
-  using BYTE = uint8_t;
-  using WORD = uint16_t;
-  using COUNT = uint64_t;
+  using BYTE = std::uint8_t;
+  using WORD = std::uint16_t;
+  using COUNT = std::uint64_t;
 }
 
 namespace SDISC // OP-Codes
@@ -17,7 +17,7 @@ namespace SDISC // OP-Codes
   {
     enum
     {
-      // Program Control
+      // Program
       STP = 0x0, // Stop
 
       // Jumps and Conditions
@@ -133,13 +133,11 @@ namespace SDISC
       for(WORD& i : reg) i = init_reg;
     }
 
-    void loadProgram(const std::vector<Instruction>& in_program)
+    template<class ArrayType>
+    void loadProgram(const ArrayType in_program)
     {
-      for(std::size_t i = 0; i < pro_size; i++)
-      {
-        if(i < in_program.size()) program[i] = in_program[i];
-        else program[i] = init_pro;
-      }
+      for(Instruction& a : program) a = Instruction();
+      std::copy(in_program.begin(), in_program.end(), program);
     }
 
   public: // Instructions
