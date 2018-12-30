@@ -241,7 +241,7 @@ namespace SDISC
   /* Program Control */
   // Stops Program [No Inputs]
   COUNT CPU::STP(const Instruction& data)
-  { return addTicks(data); }
+  { --PC; return addTicks(data); }
 
   /* Jumps/Conditions */
   // Stores current PC in rega then jumps to address in regb
